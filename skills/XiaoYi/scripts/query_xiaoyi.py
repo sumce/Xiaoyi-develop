@@ -7,7 +7,7 @@ XiaoYi Query Tool - 鸿蒙开发问题查询工具（直接从旧项目提取）
 核心代码直接从旧项目 session.py 提取，确保 API 调用正确
 
 作者: sumce
-版本: 2.0.1（稳定版）
+版本: 2.0.2（UTF-8 修复版）
 """
 
 import argparse
@@ -17,6 +17,12 @@ import sys
 import uuid
 from typing import Optional, Generator
 import requests
+
+# 强制设置 UTF-8 输出（修复 Windows PowerShell 乱码问题）
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
+if sys.stderr.encoding != 'utf-8':
+    sys.stderr.reconfigure(encoding='utf-8')
 
 
 # ==================== 配置常量（从旧项目提取）====================
@@ -255,7 +261,7 @@ def main():
     # 打印工具信息
     print("\n")
     print("╔═══════════════════════════════════════╗")
-    print("║     XiaoYi Query Tool v2.0.1         ║")
+    print("║     XiaoYi Query Tool v2.0.2         ║")
     print("║     鸿蒙开发智能查询助手               ║")
     print("║     （独立版 - 无需 SDK）             ║")
     print("╚═══════════════════════════════════════╝")

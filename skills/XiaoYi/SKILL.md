@@ -1,7 +1,7 @@
 ---
 name: xiaoyi-query
 description: 直接调用华为小艺AI客服查询鸿蒙开发相关问题（无需 SDK）
-version: 2.0.0
+version: 2.0.2
 author: sumce
 tags: [harmonyos, query, tool, reverse-api, standalone]
 ---
