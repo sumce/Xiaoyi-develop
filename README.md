@@ -24,8 +24,8 @@ pip install xiaoyi-sdk
 或使用 pip 从源码安装：
 
 ```bash
-git clone https://github.com/xiaoyi-sdk/xiaoyi-sdk.git
-cd xiaoyi-sdk
+git clone https://github.com/sumce/Xiaoyi-develop.git
+cd Xiaoyi-develop
 pip install -e .
 ```
 
@@ -205,8 +205,8 @@ ai = XiaoyiAI(anonymous_id="your-device-id")  # 可选设备ID
 
 ```bash
 # 克隆仓库
-git clone https://github.com/xiaoyi-sdk/xiaoyi-sdk.git
-cd xiaoyi-sdk
+git clone https://github.com/sumce/Xiaoyi-develop.git
+cd Xiaoyi-develop
 
 # 创建虚拟环境
 python -m venv venv
