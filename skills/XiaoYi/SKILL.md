@@ -10,6 +10,16 @@ tags: [harmonyos, query, tool, reverse-api, standalone]
 
 ## ⚠️ 重要声明
 
+**本 Skill 是独立版本，无需安装 SDK！**
+
+- ✅ **零依赖** - 只需要 Python 3.7+ 和 requests 库
+- ✅ **直接调用** - 直接 HTTP 请求华为开发者联盟 API
+- ✅ **简单轻量** - 单个 Python 文件，300+ 行代码
+
+## Goal
+
+让 AI 学会使用 XiaoYi Query Tool 向华为小艺AI客服查询鸿蒙开发相关问题。
+
 **本 Skill 基于逆向工程实现，仅供学习和研究使用！**
 
 - **严禁商业用途**

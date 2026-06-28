@@ -1,165 +1,161 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-XiaoYi Query Tool - 鸿蒙开发问题查询工具（简化独立版）
+XiaoYi Query Tool - 鸿蒙开发问题查询工具（直接从旧项目提取）
 
 直接调用华为开发者联盟智能客服 API，无需 SDK
-支持流式响应和思维链显示
+核心代码直接从旧项目 session.py 提取，确保 API 调用正确
 
 作者: sumce
-版本: 2.0.0（简化独立版）
+版本: 2.0.1（稳定版）
 """
 
 import argparse
 import hashlib
 import json
 import sys
-import time
 import uuid
 from typing import Optional, Generator
 import requests
 
 
+# ==================== 配置常量（从旧项目提取）====================
+
+API_BASE = "https://svc-drcn.developer.huawei.com/intelligentcustomer/v1/public"
+URL_DIALOG_ID = f"{API_BASE}/dialog/id"
+URL_SUBMISSION = f"{API_BASE}/dialog/submission"
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/149.0.0.0 Safari/537.36"
+    ),
+    "Origin": "https://developer.huawei.com",
+    "Referer": "https://developer.huawei.com/",
+    "Accept-Language": "zh-CN,zh;q=0.9",
+}
+
+
+# ==================== 工具函数 ====================
+
+def generate_anonymous_id() -> str:
+    """
+    生成设备指纹 ID（MD5）
+
+    Returns:
+        32位 MD5 设备指纹
+    """
+    random_uuid = str(uuid.uuid4())
+    md5_hash = hashlib.md5(random_uuid.encode()).hexdigest()
+    return md5_hash
+
+
+# ==================== 核心类（直接从旧项目提取）====================
+
 class XiaoYiQuery:
-    """华为小艺AI查询客户端（独立版，无需 SDK）"""
+    """华为小艺AI查询客户端（直接从旧项目提取，确保正确）"""
 
-    # 华为开发者联盟智能客服 API 端点
-    API_BASE = "https://svc-drcn.developer.huawei.com/intelligentcustomer/v1/public"
-    URL_DIALOG_ID = "/dialog/id"
-    URL_SUBMISSION = "/dialog/submission"
-
-    def __init__(self):
+    def __init__(self, anonymous_id: Optional[str] = None):
         """初始化查询客户端"""
-        self.session = requests.Session()
-        self.anonymous_id = self._generate_anonymous_id()
+        self.anonymous_id = anonymous_id or generate_anonymous_id()
         self.dialog_id: Optional[str] = None
-        self.dialog_created = False
+        self._http = requests.Session()
+        self._http.headers.update(HEADERS)
 
-        # 设置请求头
-        self.headers = {
-            "Content-Type": "application/json",
-            "Accept": "text/event-stream",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Origin": "https://developer.huawei.com",
-            "Referer": "https://developer.huawei.com/",
-        }
-
-    def _generate_anonymous_id(self) -> str:
+    def create_dialog(self, type_: int = 1001) -> str:
         """
-        生成设备指纹 ID（MD5）
+        POST /dialog/id → 获取 dialogId
+
+        Args:
+            type_: 对话类型 (1001=知识问答)
 
         Returns:
-            32位 MD5 设备指纹
-        """
-        # 生成随机 UUID
-        random_uuid = str(uuid.uuid4())
-        # 计算 MD5
-        md5_hash = hashlib.md5(random_uuid.encode()).hexdigest()
-        return md5_hash
-
-    def create_dialog(self) -> str:
-        """
-        创建新对话
-
-        Returns:
-            对话 ID
+            dialogId (UUID 字符串)
 
         Raises:
-            Exception: 创建对话失败
+            Exception: 创建失败
         """
-        url = f"{self.API_BASE}{self.URL_DIALOG_ID}"
-
-        data = {
-            "anonymousId": self.anonymous_id,
-            "dialogType": 1001,
-            "channel": 1,
+        body = {
             "origin": 0,
+            "type": type_,
+            "anonymousId": self.anonymous_id,
         }
+        resp = self._http.post(
+            URL_DIALOG_ID,
+            json=body,
+            headers={"Content-Type": "application/json;charset=UTF-8"},
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            raise Exception(f"HTTP {resp.status_code}: {resp.text[:200]}")
 
-        try:
-            response = self.session.post(
-                url,
-                headers=self.headers,
-                json=data,
-                timeout=30,
-            )
+        data = resp.json()
+        if data.get("code") != 0:
+            raise Exception(f"[{data.get('code')}] {data.get('message', 'unknown')}")
 
-            if response.status_code != 200:
-                raise Exception(f"HTTP错误: {response.status_code}")
-
-            result = response.json()
-
-            if result.get("code") != 0:
-                raise Exception(f"API错误: {result.get('message', '未知错误')}")
-
-            self.dialog_id = result.get("result", {}).get("dialogId")
-            self.dialog_created = True
-
-            return self.dialog_id
-
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"网络错误: {str(e)}")
+        self.dialog_id = data["result"]["dialogId"]
+        return self.dialog_id
 
     def ask(
         self,
-        question: str,
+        query: str,
+        *,
         stream: bool = True,
-        think_type: int = 1,
+        type_: int = 1001,
         sub_type: int = 2,
-    ) -> Generator[str, None, None]:
+        think_type: int = 1,
+    ) -> Generator[str, None, None] | str:
         """
-        提交问题并获取回答
+        POST /dialog/submission → 提交问题
 
         Args:
-            question: 问题内容
-            stream: 是否流式返回
-            think_type: 思考类型（1=深度思考，0=快速）
-            sub_type: 对话类型（2=首轮，1=跟进）
+            query:   问题文本
+            stream:  是否 SSE 流式返回
+            type_:   对话类型
+            sub_type: 2=新对话第一轮, 1=跟进
+            think_type: 1=深度思考, 0=关闭
 
-        Yields:
-            流式回答文本片段
+        Yields (stream=True): 流式回答文本
+        Returns (stream=False): 完整回答文本
 
         Raises:
-            Exception: 提交失败
+            Exception: API 返回错误
         """
-        # 如果对话未创建，先创建
-        if not self.dialog_created:
-            self.create_dialog()
+        if not self.dialog_id:
+            raise Exception("请先调用 create_dialog()")
 
-        url = f"{self.API_BASE}{self.URL_SUBMISSION}"
-
-        data = {
-            "anonymousId": self.anonymous_id,
+        body = {
+            "type": type_,
+            "query": query,
             "dialogId": self.dialog_id,
-            "query": question,
-            "subType": sub_type,
-            "thinkType": think_type,
             "channel": 1,
             "origin": 0,
-            "dialogType": 1001,
+            "subType": sub_type,
+            "thinkType": think_type,
+            "anonymousId": self.anonymous_id,
         }
 
-        try:
-            response = self.session.post(
-                url,
-                headers=self.headers,
-                json=data,
-                stream=True,
-                timeout=120,
-            )
+        resp = self._http.post(
+            URL_SUBMISSION,
+            json=body,
+            headers={"Content-Type": "application/json;charset=UTF-8"},
+            stream=stream,
+            timeout=120,
+        )
 
-            if response.status_code != 200:
-                raise Exception(f"HTTP错误: {response.status_code}")
+        if resp.status_code != 200:
+            raise Exception(f"HTTP {resp.status_code}")
 
-            # 解析 SSE 流式响应
+        # 解析 SSE 流式响应
+        if stream:
             accumulated_text = ""
             accumulated_thinking = ""
 
-            for line in response.iter_lines(decode_unicode=True):
+            for line in resp.iter_lines(decode_unicode=True):
                 if not line or not line.startswith("data:"):
                     continue
 
-                # 提取 JSON 数据
                 json_str = line[5:].strip()
                 if not json_str:
                     continue
@@ -179,16 +175,14 @@ class XiaoYiQuery:
                     if thinking and len(thinking) > len(accumulated_thinking):
                         new_thinking = thinking[len(accumulated_thinking):]
                         accumulated_thinking = thinking
-                        if stream:
-                            yield f"\033[90m{new_thinking}\033[0m"
+                        yield f"\033[90m{new_thinking}\033[0m"
 
                     # 提取回答文本
                     text = result.get("streamingText", "")
                     if text and len(text) > len(accumulated_text):
                         new_text = text[len(accumulated_text):]
                         accumulated_text = text
-                        if stream:
-                            yield new_text
+                        yield new_text
 
                     # 检查是否结束
                     if result.get("isFinal"):
@@ -197,22 +191,34 @@ class XiaoYiQuery:
                 except json.JSONDecodeError:
                     continue
 
-            # 返回完整文本（非流式模式）
-            if not stream:
-                yield accumulated_text
-
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"网络错误: {str(e)}")
-
-    def reset(self):
-        """重置对话，开始新对话"""
-        self.dialog_id = None
-        self.dialog_created = False
+        else:
+            # 非流式模式
+            full_text = ""
+            for line in resp.iter_lines(decode_unicode=True):
+                if not line or not line.startswith("data:"):
+                    continue
+                json_str = line[5:].strip()
+                if not json_str:
+                    continue
+                try:
+                    chunk = json.loads(json_str)
+                    if chunk.get("code") == 0:
+                        result = chunk.get("result", {})
+                        text = result.get("streamingText", "")
+                        if text:
+                            full_text = text
+                        if result.get("isFinal"):
+                            break
+                except json.JSONDecodeError:
+                    continue
+            return full_text
 
     def close(self):
         """关闭会话"""
-        self.session.close()
+        self._http.close()
 
+
+# ==================== 主函数 ====================
 
 def main():
     """主函数"""
@@ -249,7 +255,7 @@ def main():
     # 打印工具信息
     print("\n")
     print("╔═══════════════════════════════════════╗")
-    print("║     XiaoYi Query Tool v2.0.0         ║")
+    print("║     XiaoYi Query Tool v2.0.1         ║")
     print("║     鸿蒙开发智能查询助手               ║")
     print("║     （独立版 - 无需 SDK）             ║")
     print("╚═══════════════════════════════════════╝")
