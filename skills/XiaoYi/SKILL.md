@@ -2,7 +2,7 @@
 name: xiaoyi-query
 description: 使用 Xiaoyi SDK 向华为小艺AI客服查询鸿蒙开发相关问题
 version: 1.0.0
-author: Xiaoyi Developer
+author: sumce
 tags: [harmonyos, query, tool, reverse-api]
 ---
 

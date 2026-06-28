@@ -10,10 +10,10 @@ readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.8"
 authors = [
-    {name = "Xiaoyi SDK Team", email = "xiaoyi-sdk@example.com"}
+    {name = "sumce", email = "sumce@example.com"}
 ]
 maintainers = [
-    {name = "Xiaoyi SDK Team", email = "xiaoyi-sdk@example.com"}
+    {name = "sumce", email = "sumce@example.com"}
 ]
 keywords = [
     "huawei",
@@ -61,11 +61,11 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/xiaoyi-sdk/xiaoyi-sdk"
-Documentation = "https://github.com/xiaoyi-sdk/xiaoyi-sdk#readme"
-Repository = "https://github.com/xiaoyi-sdk/xiaoyi-sdk.git"
-Issues = "https://github.com/xiaoyi-sdk/xiaoyi-sdk/issues"
-Changelog = "https://github.com/xiaoyi-sdk/xiaoyi-sdk/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/sumce/Xiaoyi-develop"
+Documentation = "https://github.com/sumce/Xiaoyi-develop#readme"
+Repository = "https://github.com/sumce/Xiaoyi-develop.git"
+Issues = "https://github.com/sumce/Xiaoyi-develop/issues"
+Changelog = "https://github.com/sumce/Xiaoyi-develop/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
