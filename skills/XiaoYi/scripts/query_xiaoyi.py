@@ -1,371 +1,324 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-XiaoYi Query Tool - 鸿蒙开发问题查询工具
+XiaoYi Query Tool - 鸿蒙开发问题查询工具（简化独立版）
 
-使用华为小艺AI进行鸿蒙开发相关的智能查询
-支持普通查询、深度查询和思维链模式
+直接调用华为开发者联盟智能客服 API，无需 SDK
+支持流式响应和思维链显示
 
-作者: XiaoYi Skill
-版本: 1.0.0
+作者: sumce
+版本: 2.0.0（简化独立版）
 """
 
 import argparse
+import hashlib
 import json
 import sys
 import time
-from typing import Optional, Dict, Any, Generator
+import uuid
+from typing import Optional, Generator
 import requests
 
 
 class XiaoYiQuery:
-    """华为小艺AI查询客户端"""
-    
-    def __init__(self, endpoint: str = "https://xiaoyi.huawei.com/api/v1/query"):
-        """
-        初始化查询客户端
-        
-        Args:
-            endpoint: 小艺AI服务端点
-        """
-        self.endpoint = endpoint
+    """华为小艺AI查询客户端（独立版，无需 SDK）"""
+
+    # 华为开发者联盟智能客服 API 端点
+    API_BASE = "https://svc-drcn.developer.huawei.com/intelligentcustomer/v1/public"
+    URL_DIALOG_ID = "/dialog/id"
+    URL_SUBMISSION = "/dialog/submission"
+
+    def __init__(self):
+        """初始化查询客户端"""
+        self.session = requests.Session()
+        self.anonymous_id = self._generate_anonymous_id()
+        self.dialog_id: Optional[str] = None
+        self.dialog_created = False
+
+        # 设置请求头
         self.headers = {
             "Content-Type": "application/json",
             "Accept": "text/event-stream",
-            "User-Agent": "XiaoYi-Query-Tool/1.0"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Origin": "https://developer.huawei.com",
+            "Referer": "https://developer.huawei.com/",
         }
-    
-    def build_prompt(self, question: str, mode: str = "normal") -> str:
+
+    def _generate_anonymous_id(self) -> str:
         """
-        根据查询模式构建Prompt
-        
-        Args:
-            question: 用户问题
-            mode: 查询模式 (normal/deep/thinking)
-        
+        生成设备指纹 ID（MD5）
+
         Returns:
-            构建后的Prompt字符串
+            32位 MD5 设备指纹
         """
-        if mode == "deep":
-            prompt = f"""你是一位资深的鸿蒙开发专家，请深入分析以下问题：
+        # 生成随机 UUID
+        random_uuid = str(uuid.uuid4())
+        # 计算 MD5
+        md5_hash = hashlib.md5(random_uuid.encode()).hexdigest()
+        return md5_hash
 
-{question}
-
-请提供：
-1. 问题背景分析
-2. 核心技术原理说明
-3. 详细的解决方案
-4. 最佳实践建议
-5. 相关参考资料
-
-请确保回答详细、专业、具有指导性。"""
-        elif mode == "thinking":
-            prompt = f"""你是一位资深的鸿蒙开发专家，请使用思维链方式分析以下问题：
-
-{question}
-
-请详细展示你的推理过程，包括：
-1. 问题理解与分解
-2. 关键因素识别
-3. 可能方案对比
-4. 最优方案推导
-5. 实施建议
-
-请逐步思考，展示完整的分析过程。"""
-        else:
-            prompt = f"""你是一位鸿蒙开发专家，请回答以下问题：
-
-{question}
-
-请提供清晰、准确、实用的回答。"""
-        
-        return prompt
-    
-    def parse_sse_message(self, line: str) -> Optional[Dict[str, Any]]:
+    def create_dialog(self) -> str:
         """
-        解析SSE消息
-        
-        Args:
-            line: SSE消息行
-        
+        创建新对话
+
         Returns:
-            解析后的字典，如果无效则返回None
+            对话 ID
+
+        Raises:
+            Exception: 创建对话失败
         """
-        if not line or not line.startswith("data:"):
-            return None
-        
-        try:
-            data_str = line[5:].strip()  # 移除 "data:" 前缀
-            if not data_str:
-                return None
-            return json.loads(data_str)
-        except json.JSONDecodeError:
-            return None
-    
-    def extract_text(self, data: Dict[str, Any]) -> str:
-        """
-        从响应数据中提取文本
-        
-        Args:
-            data: 响应数据字典
-        
-        Returns:
-            提取的文本内容
-        """
-        # 适配不同的响应格式
-        if "text" in data:
-            return data["text"]
-        elif "content" in data:
-            return data["content"]
-        elif "delta" in data and "content" in data["delta"]:
-            return data["delta"]["content"]
-        elif "choices" in data and len(data["choices"]) > 0:
-            choice = data["choices"][0]
-            if "delta" in choice and "content" in choice["delta"]:
-                return choice["delta"]["content"]
-            elif "text" in choice:
-                return choice["text"]
-        return ""
-    
-    def query_stream(self, question: str, mode: str = "normal") -> Generator[str, None, None]:
-        """
-        流式查询小艺AI
-        
-        Args:
-            question: 用户问题
-            mode: 查询模式
-        
-        Yields:
-            增量文本片段
-        """
-        prompt = self.build_prompt(question, mode)
-        
-        payload = {
-            "prompt": prompt,
-            "mode": mode,
-            "stream": True,
-            "max_tokens": 2000
+        url = f"{self.API_BASE}{self.URL_DIALOG_ID}"
+
+        data = {
+            "anonymousId": self.anonymous_id,
+            "dialogType": 1001,
+            "channel": 1,
+            "origin": 0,
         }
-        
+
         try:
-            response = requests.post(
-                self.endpoint,
+            response = self.session.post(
+                url,
                 headers=self.headers,
-                json=payload,
-                stream=True,
-                timeout=60
+                json=data,
+                timeout=30,
             )
-            response.raise_for_status()
-            
-            for line in response.iter_lines():
-                if not line:
-                    continue
-                
-                line_str = line.decode('utf-8')
-                data = self.parse_sse_message(line_str)
-                
-                if data:
-                    text = self.extract_text(data)
-                    if text:
-                        yield text
-                    
-                    # 检查是否结束
-                    if data.get("finish_reason") == "stop":
-                        break
-                        
-        except requests.exceptions.Timeout:
-            raise Exception("请求超时，请检查网络连接")
-        except requests.exceptions.ConnectionError:
-            raise Exception("无法连接到小艺AI服务，请检查网络设置")
-        except requests.exceptions.HTTPError as e:
-            raise Exception(f"HTTP错误: {e.response.status_code}")
-        except Exception as e:
-            raise Exception(f"查询失败: {str(e)}")
-    
-    def query(self, question: str, mode: str = "normal", stream: bool = True) -> str:
+
+            if response.status_code != 200:
+                raise Exception(f"HTTP错误: {response.status_code}")
+
+            result = response.json()
+
+            if result.get("code") != 0:
+                raise Exception(f"API错误: {result.get('message', '未知错误')}")
+
+            self.dialog_id = result.get("result", {}).get("dialogId")
+            self.dialog_created = True
+
+            return self.dialog_id
+
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"网络错误: {str(e)}")
+
+    def ask(
+        self,
+        question: str,
+        stream: bool = True,
+        think_type: int = 1,
+        sub_type: int = 2,
+    ) -> Generator[str, None, None]:
         """
-        查询小艺AI
-        
+        提交问题并获取回答
+
         Args:
-            question: 用户问题
-            mode: 查询模式
-            stream: 是否使用流式输出
-        
-        Returns:
-            完整的回答文本
+            question: 问题内容
+            stream: 是否流式返回
+            think_type: 思考类型（1=深度思考，0=快速）
+            sub_type: 对话类型（2=首轮，1=跟进）
+
+        Yields:
+            流式回答文本片段
+
+        Raises:
+            Exception: 提交失败
         """
-        if not stream:
-            # 非流式模式，收集所有内容
-            full_response = []
-            for text in self.query_stream(question, mode):
-                full_response.append(text)
-            return "".join(full_response)
-        else:
-            # 流式模式，实时打印
-            full_response = []
-            for text in self.query_stream(question, mode):
-                print(text, end='', flush=True)
-                full_response.append(text)
-            print()  # 结束换行
-            return "".join(full_response)
+        # 如果对话未创建，先创建
+        if not self.dialog_created:
+            self.create_dialog()
 
+        url = f"{self.API_BASE}{self.URL_SUBMISSION}"
 
-def print_banner():
-    """打印程序Banner"""
-    banner = """
-╔═══════════════════════════════════════╗
-║     XiaoYi Query Tool v1.0.0         ║
-║     鸿蒙开发智能查询助手               ║
-╚═══════════════════════════════════════╝
-    """
-    print(banner)
+        data = {
+            "anonymousId": self.anonymous_id,
+            "dialogId": self.dialog_id,
+            "query": question,
+            "subType": sub_type,
+            "thinkType": think_type,
+            "channel": 1,
+            "origin": 0,
+            "dialogType": 1001,
+        }
 
+        try:
+            response = self.session.post(
+                url,
+                headers=self.headers,
+                json=data,
+                stream=True,
+                timeout=120,
+            )
 
-def print_separator():
-    """打印分隔线"""
-    print("\n" + "=" * 50 + "\n")
+            if response.status_code != 200:
+                raise Exception(f"HTTP错误: {response.status_code}")
 
+            # 解析 SSE 流式响应
+            accumulated_text = ""
+            accumulated_thinking = ""
 
-def format_output(text: str, mode: str) -> str:
-    """
-    格式化输出文本
-    
-    Args:
-        text: 原始文本
-        mode: 查询模式
-    
-    Returns:
-        格式化后的文本
-    """
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    
-    header = f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-查询时间: {timestamp}
-查询模式: {mode}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            for line in response.iter_lines(decode_unicode=True):
+                if not line or not line.startswith("data:"):
+                    continue
 
-"""
-    
-    footer = """
+                # 提取 JSON 数据
+                json_str = line[5:].strip()
+                if not json_str:
+                    continue
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-查询完成
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-"""
-    
-    return header + text + footer
+                try:
+                    chunk = json.loads(json_str)
+
+                    # 检查错误
+                    if chunk.get("code") != 0:
+                        error_msg = chunk.get("message", "未知错误")
+                        raise Exception(f"API错误: {error_msg}")
+
+                    result = chunk.get("result", {})
+
+                    # 提取思维链（如果有）
+                    thinking = result.get("thinking", "")
+                    if thinking and len(thinking) > len(accumulated_thinking):
+                        new_thinking = thinking[len(accumulated_thinking):]
+                        accumulated_thinking = thinking
+                        if stream:
+                            yield f"\033[90m{new_thinking}\033[0m"
+
+                    # 提取回答文本
+                    text = result.get("streamingText", "")
+                    if text and len(text) > len(accumulated_text):
+                        new_text = text[len(accumulated_text):]
+                        accumulated_text = text
+                        if stream:
+                            yield new_text
+
+                    # 检查是否结束
+                    if result.get("isFinal"):
+                        break
+
+                except json.JSONDecodeError:
+                    continue
+
+            # 返回完整文本（非流式模式）
+            if not stream:
+                yield accumulated_text
+
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"网络错误: {str(e)}")
+
+    def reset(self):
+        """重置对话，开始新对话"""
+        self.dialog_id = None
+        self.dialog_created = False
+
+    def close(self):
+        """关闭会话"""
+        self.session.close()
 
 
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description="XiaoYi Query Tool - 鸿蒙开发智能查询工具",
+        description="XiaoYi Query Tool - 鸿蒙开发问题查询工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-使用示例:
-  # 普通查询
-  python query_xiaoyi.py "如何使用 TextInput 组件？"
-  
-  # 深度查询
-  python query_xiaoyi.py --deep "详细分析 LazyForEach 性能优化方案"
-  
-  # 思维链模式
-  python query_xiaoyi.py --thinking "对比 MVVM 和 Clean Architecture 在鸿蒙中的应用"
-        """
+示例:
+  python query_xiaoyi.py "什么是鸿蒙开发"
+  python query_xiaoyi.py "ArkUI 如何使用" --thinking
+  python query_xiaoyi.py "如何配置 DevEco Studio" --deep
+        """,
     )
-    
-    parser.add_argument(
-        "question",
-        type=str,
-        help="要查询的问题"
-    )
-    
-    parser.add_argument(
-        "--deep",
-        action="store_true",
-        help="使用深度查询模式，提供更详细的分析"
-    )
-    
+
+    parser.add_argument("question", help="要查询的问题")
     parser.add_argument(
         "--thinking",
         action="store_true",
-        help="使用思维链模式，展示推理过程"
+        help="显示 AI 思维链（深度思考模式）",
     )
-    
     parser.add_argument(
-        "--endpoint",
-        type=str,
-        default="https://xiaoyi.huawei.com/api/v1/query",
-        help="小艺AI服务端点 (默认: https://xiaoyi.huawei.com/api/v1/query)"
+        "--deep",
+        action="store_true",
+        help="深度分析模式",
     )
-    
     parser.add_argument(
         "--no-stream",
         action="store_true",
-        help="禁用流式输出，等待完整响应后显示"
+        help="非流式输出（等待完整响应）",
     )
-    
-    parser.add_argument(
-        "--version",
-        action="version",
-        version="XiaoYi Query Tool v1.0.0"
-    )
-    
+
     args = parser.parse_args()
-    
-    # 确定查询模式
-    if args.deep:
-        mode = "deep"
-    elif args.thinking:
-        mode = "thinking"
-    else:
-        mode = "normal"
-    
-    # 打印Banner
-    print_banner()
-    
-    # 显示查询信息
+
+    # 打印工具信息
+    print("\n")
+    print("╔═══════════════════════════════════════╗")
+    print("║     XiaoYi Query Tool v2.0.0         ║")
+    print("║     鸿蒙开发智能查询助手               ║")
+    print("║     （独立版 - 无需 SDK）             ║")
+    print("╚═══════════════════════════════════════╝")
+    print()
+
     print(f"📝 问题: {args.question}")
-    print(f"🔍 模式: {mode}")
-    print_separator()
-    
+    print(f"🔄 模式: {'深度思考' if args.thinking else '快速查询'}")
+    print()
+
+    # 创建查询客户端
+    client = XiaoYiQuery()
+
     try:
-        # 创建查询客户端
-        client = XiaoYiQuery(endpoint=args.endpoint)
-        
-        # 执行查询
-        if args.no_stream:
-            # 非流式模式
-            print("⏳ 正在查询，请稍候...")
-            response = client.query(
-                args.question,
-                mode=mode,
-                stream=False
-            )
-            print(format_output(response, mode))
-        else:
-            # 流式模式
-            print("💡 回答:\n")
-            response = client.query(
-                args.question,
-                mode=mode,
-                stream=True
-            )
-        
-        print_separator()
-        print("✅ 查询成功！")
-        
-    except KeyboardInterrupt:
-        print("\n\n⚠️  用户中断查询")
-        sys.exit(0)
+        # 创建对话
+        print("⏳ 正在连接华为小艺 AI...")
+        dialog_id = client.create_dialog()
+        print(f"✅ 对话创建成功 (ID: {dialog_id[:16]}...)")
+        print()
+
+        # 设置思考类型
+        think_type = 1 if args.thinking or args.deep else 0
+
+        # 查询问题
+        print("🤖 小艺回答:")
+        print("─" * 50)
+
+        full_response = ""
+        for chunk in client.ask(
+            args.question,
+            stream=not args.no_stream,
+            think_type=think_type,
+        ):
+            print(chunk, end="", flush=True)
+            full_response += chunk.replace("\033[90m", "").replace("\033[0m", "")
+
+        print()
+        print("─" * 50)
+        print()
+
+        # 显示对话 ID（可用于继续对话）
+        print(f"💡 对话 ID: {dialog_id}")
+        print(f"💡 设备 ID: {client.anonymous_id}")
+        print()
+
+        # 显示免责声明
+        print("⚠️  免责声明:")
+        print("   - 本工具基于逆向工程，非华为官方接口")
+        print("   - 仅供学习研究使用，严禁商业用途")
+        print("   - 使用风险自负，请遵守华为开发者服务条款")
+        print()
+
+        # 关闭会话
+        client.close()
+
     except Exception as e:
-        print(f"\n❌ 错误: {str(e)}", file=sys.stderr)
-        print("\n💡 建议:")
-        print("  1. 检查网络连接")
-        print("  2. 确认服务端点是否正确")
-        print("  3. 尝试使用 --deep 或 --thinking 模式")
-        print("  4. 查看错误日志获取详细信息")
+        print(f"\n❌ 错误: {str(e)}")
+        print()
+        print("🔍 可能的原因:")
+        print("   1. 网络连接问题")
+        print("   2. 华为 API 端点已变更")
+        print("   3. 试用额度已用完")
+        print()
+        print("💡 建议:")
+        print("   - 检查网络连接")
+        print("   - 查看 GitHub 项目更新: https://github.com/sumce/Xiaoyi-develop")
+        print("   - 生成新的设备 ID 重试")
+        print()
+
+        client.close()
         sys.exit(1)
 
 

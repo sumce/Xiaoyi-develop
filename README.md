@@ -199,6 +199,56 @@ ai = XiaoyiAI(anonymous_id="your-device-id")  # 可选设备ID
 - [`basic_usage.py`](examples/basic_usage.py) - 基础使用示例
 - [`interactive_chat.py`](examples/interactive_chat.py) - 交互式命令行聊天
 
+## Skills
+
+本项目包含一个 **XiaoYi Query Skill**，用于让 AI 学会使用 Xiaoyi SDK 查询鸿蒙开发相关问题。
+
+### Skill 功能
+
+- 🤖 **AI 自动查询** - 让 AI 自动调用 Xiaoyi SDK 查询鸿蒙开发问题
+- 📝 **问题模板** - 提供结构化的问题查询模板
+- 🔄 **多轮对话** - 支持上下文相关的多轮查询
+- 🧠 **思维链展示** - 显示 AI 推理过程
+
+### Skill 结构
+
+```
+skills/XiaoYi/
+├── SKILL.md                 # Skill 入口（AI 读取）
+├── README.md                # 使用说明
+├── DISCLAIMER.md            # 免责声明
+├── prompts/                 # Prompt 模板
+│   └── query.md             # 鸿蒙问题查询模板
+├── scripts/                 # 核心脚本
+│   └── query_xiaoyi.py      # SDK 集成脚本
+├── templates/               # 输出模板
+│   └── response_template.md # 响应格式模板
+└── examples/                # 使用示例
+    ├── basic_query.py       # 基础查询
+    ├── multi_turn.py        # 多轮对话
+    └── thinking_chain.py    # 思维链显示
+```
+
+### Skill 使用
+
+当用户询问鸿蒙开发问题时，AI 会：
+
+1. 读取 `SKILL.md` 了解使用规则
+2. 使用 `prompts/query.md` 构造问题
+3. 调用 `scripts/query_xiaoyi.py` 执行查询
+4. 处理 SSE 流式响应
+5. 按照 `templates/response_template.md` 格式化输出
+
+### 免责声明
+
+⚠️ **重要说明**：
+
+- 本 Skill 基于逆向工程，非华为官方接口
+- 仅供学习研究使用
+- 严禁商业用途
+- 使用风险自负
+- 详细声明见 [`skills/XiaoYi/DISCLAIMER.md`](skills/XiaoYi/DISCLAIMER.md)
+
 ## 开发
 
 ### 环境设置

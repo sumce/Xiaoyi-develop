@@ -1,9 +1,9 @@
 ---
 name: xiaoyi-query
-description: 使用 Xiaoyi SDK 向华为小艺AI客服查询鸿蒙开发相关问题
-version: 1.0.0
+description: 直接调用华为小艺AI客服查询鸿蒙开发相关问题（无需 SDK）
+version: 2.0.0
 author: sumce
-tags: [harmonyos, query, tool, reverse-api]
+tags: [harmonyos, query, tool, reverse-api, standalone]
 ---
 
 # XiaoYi Query Skill - 鸿蒙开发问题查询工具
