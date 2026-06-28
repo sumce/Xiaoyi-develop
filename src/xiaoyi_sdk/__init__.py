@@ -6,7 +6,6 @@ Xiaoyi SDK - 华为智能客服 Python SDK
 
 __version__ = "3.0.0"
 __author__ = "sumce"
-__email__ = "sumce@example.com"
 
 from xiaoyi_sdk.api.session import XiaoyiSession
 from xiaoyi_sdk.api.client import XiaoyiAI
